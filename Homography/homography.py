@@ -96,6 +96,65 @@ def Haffine_from_points(fp, tp):
     return H / H[2, 2]  # 归一化，然后返回
 
 
+class RansacModel(object):
+    '''用于测试单应性矩阵的类，其中单应性矩阵由ransac.py计算'''
+    def __init__(self, debug = False):
+        self.debug = debug
+
+    def fit(self, data):
+        """计算选取的四个对应的单应性矩阵"""
+        data = data.T  # 转置后调用H_from_points()来计算单应性矩阵
+        fp = data[:3, :4]  # 映射的起始点
+        tp = data[3:, :4]  # 映射的目标点
+        return H_from_points(fp, tp)
+
+    def get_error(self, data, H):
+        """对于所有的对应计算单应性矩阵，然后对每个变换后的点返回相应的误差"""
+        data = data.T
+        fp = data[:3]  # 映射的起始点
+        tp = data[3:]  # 映射的目标点
+        # 变换fp
+        fp_transformed = numpy.dot(H, fp)
+        normalize(fp_transformed)  # 归一化齐次坐标
+        # 返回每个点的误差
+        return numpy.sqrt(numpy.sum((tp - fp_transformed) ** 2, axis=0))
+
+
+def H_from_ransac(fp, tp, model, maxiter=1000, match_threshold=10):
+    """使用RANSAC稳健性估计点对间的单应性矩阵H"""
+    import ransac
+    data = numpy.vstack((fp, tp))  # 对应点组
+    # 计算H并返回
+    H, ransac_data = ransac.ransac(data.T, model, 4, maxiter, match_threshold, 10, return_all=True)
+    return H, ransac_data['inliers']
+
+
+class AffineRansacModel(object):
+  def fit(self, data):
+    data = data.T  # for Haffine_from_points
+    fp = data[:3]
+    tp = data[3:]
+    return Haffine_from_points(fp, tp)
+
+  def get_error(self, data, H):
+    data = data.T
+    fp = data[:3]
+    tp = data[3:]
+
+    fp_transformed = numpy.dot(H, fp)
+    #normalize(fp_transformed)
+
+    return numpy.sqrt(numpy.sum((tp - fp_transformed) ** 2, axis=0))
+
+
+def Haffine_from_ransac(fp, tp, model, maxiter=1000, match_threshold=10):
+  import ransac
+  data = numpy.vstack((fp, tp))
+  H, ransac_data = ransac.ransac(data.T, model, 3, maxiter, match_threshold, 7, return_all=True)
+  return H, ransac_data['inliers']
+
+
+
 if __name__ == "__main__":
     '''计算直接线性变换的单应性矩阵需要四个点对，同时是因为在齐次坐标系所以每个点有三个维度'''
     fp = numpy.array([[1, 0, 1], [1, 0, 1], [0, 1, 1], [1, 1, 1]]).T
